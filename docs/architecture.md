@@ -2,7 +2,7 @@
 
 **Status:** Draft v0.1
 **Last Updated:** 2026-02-12
-**Protocol Version:** 2025-06-18
+**Protocol Version:** 2025-11-25
 
 ---
 
@@ -120,6 +120,7 @@ Team Member                    MCP Server                     External Services
 - The SDK is transport-agnostic — tool code is identical across transports; only the entry point differs.
 - Streamable HTTP is a hard gate before Phase 2 because team-sharing is a core hypothesis, not optional.
 - The old HTTP+SSE transport (protocol version 2024-11-05) is deprecated and excluded from this architecture.
+- This server targets **protocol version 2025-11-25** — the latest stable spec at time of writing.
 
 **Evolution trigger:** Streamable HTTP spike (S3) must be completed and validated before Phase 2 begins.
 
@@ -132,7 +133,7 @@ Team Member                    MCP Server                     External Services
 | #   | Question                    | Decision                                             | Rationale                                                              |
 | --- | --------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
 | Q1  | Transport layer?            | stdio (Phase 1) + Streamable HTTP (pre-Phase 2 gate) | Fastest POC path; HTTP required before team-sharing                    |
-| Q2  | Old HTTP+SSE support?       | Excluded                                             | Deprecated as of protocol 2025-06-18                                   |
+| Q2  | Old HTTP+SSE support?       | Excluded                                             | Deprecated as of protocol 2025-06-18; confirmed excluded in 2025-11-25 |
 | Q3  | Framework?                  | `@modelcontextprotocol/sdk`                          | Official SDK, first-class Zod + TypeScript support                     |
 | Q4  | Language?                   | TypeScript strict mode                               | Type safety, Zod compatibility                                         |
 | Q5  | Validation?                 | Zod at all boundaries                                | Consistent with SDK patterns, type-safe                                |
@@ -218,13 +219,27 @@ MCP Client Request
 - Rate limiting is a middleware slot — Phase 1 defines the config shape but does not enforce.
 - Error handling wraps everything — handlers return typed results; unhandled errors are caught at the transport layer.
 
+### Tool Context Object
+
+Tool handlers need access to both the MCP server (for registration) and shared infrastructure (validated config, logger, HTTP client). A lightweight context object provides this without a class wrapper:
+
+```typescript
+// src/types.ts
+export interface ToolContext {
+  server: McpServer;
+  config: ServerConfig;
+}
+```
+
+**Rationale:** The server has no local state (no DB, no sessions) — tools are stateless API proxies. A context interface is simpler than a class and avoids unnecessary lifecycle management. If shared infrastructure grows (logger, HTTP client, rate limiter), the interface extends naturally without refactoring registration functions.
+
 ### Tool Handler Pattern
 
 Functional with registration functions. Each tool domain is a directory containing one file per operation:
 
 ```
 src/tools/jira/
-  ├── index.ts              # registerJiraTools(server) — wires all operations
+  ├── index.ts              # registerJiraTools(context) — wires all operations
   ├── get-issue.ts          # jira_get_issue handler + input schema
   ├── create-issue.ts       # jira_create_issue handler + input schema
   ├── search-issues.ts      # jira_search_issues handler + input schema
@@ -234,23 +249,92 @@ src/tools/jira/
 
 Each handler file co-locates:
 
-1. Input schema (Zod) — what the tool accepts
+1. Input schema (Zod) — what the tool accepts (every field must have `.describe()` — see [Input Schema Conventions](#input-schema-conventions))
 2. Handler function — validate → execute → format
-3. Tool metadata (name, description) — co-located, not in a separate config file
+3. Tool metadata (name, description, annotations) — co-located, not in a separate config file
 
 The `index.ts` registration function composes them:
 
 ```typescript
 // src/tools/jira/index.ts
-export function registerJiraTools(server: McpServer): void {
-  registerGetIssue(server);
-  registerCreateIssue(server);
-  registerSearchIssues(server);
-  registerUpdateIssue(server);
+export function registerJiraTools(context: ToolContext): void {
+  registerGetIssue(context);
+  registerCreateIssue(context);
+  registerSearchIssues(context);
+  registerUpdateIssue(context);
 }
 ```
 
 **Rationale:** Aligns with the SDK's functional `registerTool()` API. Zero abstraction overhead. Adding a new operation = new file + one line in `index.ts`.
+
+### Tool Annotations
+
+Every tool must include an `annotations` object in its `registerTool()` config. Annotations communicate behavioural hints to MCP clients, enabling them to make safety decisions (e.g. auto-approve read-only tools, prompt before destructive operations).
+
+```typescript
+// src/tools/jira/get-issue.ts
+export function registerGetIssue(context: ToolContext): void {
+  context.server.registerTool(
+    'jira_get_issue',
+    {
+      description: 'Fetch a Jira issue by its key (e.g. PROJ-123)',
+      inputSchema: {
+        issueKey: z.string().describe('The Jira issue key (e.g. "PROJ-123")'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: true,
+      },
+    },
+    async ({ issueKey }) => {
+      // handler implementation
+    }
+  );
+}
+```
+
+**Standard annotation patterns for this server:**
+
+| Tool Type                | `readOnlyHint` | `destructiveHint` | `openWorldHint` | `idempotentHint` |
+| ------------------------ | -------------- | ----------------- | --------------- | ---------------- |
+| Read (get, search, list) | `true`         | `false`           | `true`          | `true`           |
+| Create                   | `false`        | `false`           | `true`          | `false`          |
+| Update                   | `false`        | `false`           | `true`          | `true`           |
+| Delete (future)          | `false`        | `true`            | `true`          | `true`           |
+
+**Note:** All tools in this server set `openWorldHint: true` because they access external services (Jira, S3). This differs from local-only servers where `openWorldHint: false` is appropriate.
+
+### Input Schema Conventions
+
+**Mandatory: `.describe()` on every Zod input field.** Descriptions are consumed by LLMs to understand what values to provide. Without them, LLMs guess — often incorrectly.
+
+```typescript
+// Correct — every field has .describe()
+const inputSchema = {
+  issueKey: z.string().describe('The Jira issue key (e.g. "PROJ-123")'),
+  jql: z.string().describe('A JQL query string (e.g. "project = PROJ AND status = Open")'),
+  maxResults: z
+    .number()
+    .optional()
+    .default(50)
+    .describe('Maximum number of results to return (1–100)'),
+};
+
+// Wrong — missing descriptions
+const inputSchema = {
+  issueKey: z.string(),
+  jql: z.string(),
+  maxResults: z.number().optional(),
+};
+```
+
+**Guidelines:**
+
+- Include example values for non-obvious fields (JQL syntax, key formats)
+- Use `.optional()` and `.default()` for sensible defaults
+- Input schemas are plain objects of Zod fields (not wrapped in `z.object()`) — the SDK handles wrapping internally
 
 ### Server Entry Point Pattern
 
@@ -258,10 +342,29 @@ The `createServer()` factory is transport-agnostic — the clean seam between to
 
 ```typescript
 // src/server.ts
-export function createServer(): McpServer {
-  const server = new McpServer({ name: "mcp-server-poc", version: "1.0.0" });
-  registerJiraTools(server);
-  registerBrandTools(server);
+export function createServer(config: ServerConfig): McpServer {
+  const server = new McpServer(
+    {
+      name: 'mcp-server-poc',
+      version: '1.0.0',
+    },
+    {
+      capabilities: {
+        tools: {},
+      },
+      instructions: `
+MCP Server POC provides shared AI tooling for teams.
+Available integrations: Jira (issue CRUD and JQL search)
+and Brand Guidelines (per-project config from S3).
+Tools use shared credentials — individual users do not
+need their own API keys.
+      `.trim(),
+    }
+  );
+
+  const context: ToolContext = { server, config };
+  registerJiraTools(context);
+  registerBrandTools(context);
   return server;
 }
 ```
@@ -493,20 +596,20 @@ const ServerConfigSchema = z.object({
 
 ### Stack
 
-| Layer           | Technology                   | Notes                                                                    |
-| --------------- | ---------------------------- | ------------------------------------------------------------------------ |
-| Runtime         | Node.js 22+ (LTS)            | Native fetch, stable ESM                                                 |
-| Language        | TypeScript 5.x (strict mode) | `strict: true`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` |
-| MCP Framework   | `@modelcontextprotocol/sdk`  | Official SDK, Zod-native tool registration                               |
-| Validation      | Zod                          | All boundaries: inputs, API responses, config                            |
-| HTTP Client     | Native `fetch` (Node 22+)    | No external dependency; reassess if retry/interceptor needs arise        |
-| AWS             | `@aws-sdk/client-s3` (v3)    | Modular — S3 client only                                                 |
-| Package Manager | pnpm                         | Strict dependency hoisting, fast installs                                |
-| Formatting      | Prettier                     | 2-space indent, trailing commas ES5, semicolons required                 |
-| Linting         | ESLint + `typescript-eslint` | Strict TypeScript rules, no `any` without justification                  |
-| Build           | `tsc` (TypeScript compiler)  | ESM output to `dist/`; no bundler needed                                 |
-| Git Hooks       | Husky                        | Pre-commit: lint + format. Pre-push: lint + format + type-check + build  |
-| Module Format   | ESM                          | `"type": "module"` in `package.json`; `NodeNext` module resolution       |
+| Layer           | Technology                   | Notes                                                                                                                                           |
+| --------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime         | Node.js 22+ (LTS)            | Native fetch, stable ESM                                                                                                                        |
+| Language        | TypeScript 5.x (strict mode) | `strict: true`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`                                                                        |
+| MCP Framework   | `@modelcontextprotocol/sdk`  | Official SDK, Zod-native tool registration                                                                                                      |
+| Validation      | Zod 3.25.x                   | All boundaries: inputs, API responses, config. Pinned to 3.25.x — Zod v4 has known incompatibility with MCP SDK v1.x. Revisit when SDK v2 ships |
+| HTTP Client     | Native `fetch` (Node 22+)    | No external dependency; reassess if retry/interceptor needs arise                                                                               |
+| AWS             | `@aws-sdk/client-s3` (v3)    | Modular — S3 client only                                                                                                                        |
+| Package Manager | pnpm                         | Strict dependency hoisting, fast installs                                                                                                       |
+| Formatting      | Prettier                     | 2-space indent, trailing commas ES5, semicolons required                                                                                        |
+| Linting         | ESLint + `typescript-eslint` | Strict TypeScript rules, no `any` without justification                                                                                         |
+| Build           | `tsc` (TypeScript compiler)  | ESM output to `dist/`; no bundler needed                                                                                                        |
+| Git Hooks       | Husky                        | Pre-commit: lint + format. Pre-push: lint + format + type-check + build                                                                         |
+| Module Format   | ESM                          | `"type": "module"` in `package.json`; `NodeNext` module resolution                                                                              |
 
 ### Testing (Deferred)
 
@@ -548,7 +651,8 @@ mcp-server-poc/
 │   └── roadmap.md                   # Phase roadmap (single source of truth)
 │
 ├── src/
-│   ├── server.ts                    # createServer() factory — registers all tools
+│   ├── server.ts                    # createServer(config) factory — registers all tools
+│   ├── types.ts                     # ToolContext interface, shared types
 │   │
 │   ├── transports/
 │   │   ├── stdio.ts                 # Entry point: stdio transport (Phase 1)
@@ -556,7 +660,7 @@ mcp-server-poc/
 │   │
 │   ├── tools/
 │   │   ├── jira/
-│   │   │   ├── index.ts             # registerJiraTools(server)
+│   │   │   ├── index.ts             # registerJiraTools(context)
 │   │   │   ├── get-issue.ts         # jira_get_issue handler + input schema
 │   │   │   ├── create-issue.ts      # jira_create_issue handler + input schema
 │   │   │   ├── search-issues.ts     # jira_search_issues handler + input schema
@@ -564,7 +668,7 @@ mcp-server-poc/
 │   │   │   └── schemas.ts           # Shared Jira Zod schemas (response types)
 │   │   │
 │   │   └── brand-guidelines/
-│   │       ├── index.ts             # registerBrandTools(server)
+│   │       ├── index.ts             # registerBrandTools(context)
 │   │       ├── get-guidelines.ts    # brand_get_guidelines handler + input schema
 │   │       └── schemas.ts           # Brand config Zod schemas
 │   │
@@ -598,20 +702,21 @@ mcp-server-poc/
 
 ```
 transports/stdio.ts ──► server.ts ──► tools/jira/index.ts ──► tools/jira/get-issue.ts
-transports/http.ts  ──►           ──► tools/brand/index.ts ──► tools/brand/get-guidelines.ts
-                                                     │
-                                                     ▼
-                                              shared/errors.ts
-                                              shared/logger.ts
-                                              shared/http-client.ts
-                                              config/index.ts
+transports/http.ts  ──►     │    ──► tools/brand/index.ts ──► tools/brand/get-guidelines.ts
+                            │                    │
+                            ▼                    ▼
+                       types.ts           shared/errors.ts
+                       config/index.ts    shared/logger.ts
+                                          shared/http-client.ts
+                                          config/index.ts
 ```
 
 **Rules:**
 
-- Transport entry points depend on `server.ts` only — never on tools directly.
-- `server.ts` depends on tool registration functions only — never on tool internals.
-- Tool handlers depend on `shared/` and `config/` — never on each other.
+- Transport entry points depend on `server.ts` and `config/` only — never on tools directly.
+- `server.ts` depends on tool registration functions and `types.ts` — never on tool internals.
+- Tool handlers receive `ToolContext` and depend on `shared/` and `config/` — never on each other.
+- `types.ts` depends on `config/` (for `ServerConfig` type) and SDK types — nothing else.
 - `shared/` has no dependencies on tools or config (standalone utilities).
 - `config/` is a leaf — depends on nothing internal.
 
@@ -636,6 +741,20 @@ transports/http.ts  ──►           ──► tools/brand/index.ts ──►
 | R4  | Streamable HTTP complexity underestimated              | Dedicated spike (S3) before Phase 2 gate; SDK has built-in transport + auth middleware        | Open      |
 | R5  | Tool response too verbose for LLM context windows      | Transformer layer surfaces only essential fields; monitor token usage during testing          | Open      |
 | R6  | Native fetch limitations surface during implementation | Thin `http-client.ts` wrapper provides a single swap point if an external library is needed   | Open      |
+
+### Phase 2+ MCP Primitives
+
+The following MCP capabilities are out of scope for Phase 1 but should be evaluated during Phase 2 planning:
+
+| Primitive                   | Purpose                                                                            | Phase 1 Relevance                                | Phase 2+ Opportunity                                                                               |
+| --------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| **Resources**               | Expose listable, URI-addressable data to clients                                   | None — tools are stateless API proxies           | Brand guidelines as a resource (`brand://deck-loc/guidelines`); Jira projects as a resource list   |
+| **Prompts**                 | Reusable workflow templates that chain tool calls                                  | None                                             | Common workflows (e.g. "search Jira for open bugs in project X and summarise") as prompt templates |
+| **Output schemas**          | Typed `structuredContent` alongside human-readable `content`                       | None — text responses sufficient for human users | CI/CD agents and API consumers (Phase 2 target users) benefit from typed, parseable responses      |
+| **Elicitation**             | Server-initiated user confirmation before actions                                  | None — Jira create/update are reversible         | Destructive operations (delete tools, bulk updates)                                                |
+| **Progress / Cancellation** | Progress reporting and cooperative cancellation for long-running tasks             | None — API calls are sub-second                  | Image generation, bulk operations, report generation                                               |
+| **Sampling**                | Server-initiated LLM calls                                                         | None                                             | Automated workflows (e.g. auto-tagging, summarisation)                                             |
+| **Tasks primitive**         | Async long-running operations with durable state (experimental in 2025-11-25 spec) | None                                             | Truly long-running operations (minutes/hours)                                                      |
 
 ### Spikes
 
