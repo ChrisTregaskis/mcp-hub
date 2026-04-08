@@ -145,4 +145,5 @@ Every boundary requires Zod validation:
 - **Agents**: Senior code reviewer available for autonomous review
 - **Skills**: Domain skills to be populated as architecture solidifies
 - **Spikes**: Technical exploration documents in `.claude/spikes/`
-- **Session continuity**: `_project-state.md` maintains context across sessions
+- **Local files**: Optional `.claude/local/` directory for developer-specific files (gitignored) — e.g. `project-state.md`, `review-context.md`. Not every developer will create one
+- **Session continuity**: `.claude/local/project-state.md` maintains context across sessions (if the directory exists)

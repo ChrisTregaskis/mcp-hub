@@ -27,10 +27,6 @@ Thumbs.db
 # Claude Code (local-only files)
 CLAUDE.local.md
 .claude/settings.local.json
-.claude/plans/
-.claude/spikes/
-.claude/docs/
-.claude/prompts/
 .claude/local/
 
 # Test artifacts

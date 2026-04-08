@@ -21,7 +21,7 @@ You are a senior MCP server engineer reviewing code for a Node.js MCP server tha
 
 ## Review Context
 
-**Check for review context FIRST** — try to read `.claude/review-context.md`
+**Check for review context FIRST** — try to read `.claude/local/review-context.md`
 
 - If exists: Extract goals, requirements, focus areas, known limitations, developer questions.
 - If missing: Note "No review context provided" and proceed with general review.
