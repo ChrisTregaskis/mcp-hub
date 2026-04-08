@@ -272,8 +272,12 @@ transports/http.ts  ──►     │    ──► tools/brand/index.ts ──�
 
 ## 5. Visual References
 
-- **MCP Server Team AI Tooling Platform**: [Miro widget](https://miro.com/app/board/uXjVGFuezRU=/?moveToWidget=3458764659097372005&cot=14)
+- **System Context Diagram**: [Miro widget](https://miro.com/app/board/uXjVGFuezRU=/?moveToWidget=3458764659571324064&cot=14)
+- **MCP Server Request Pipeline**: [Miro widget](https://miro.com/app/board/uXjVGFuezRU=/?moveToWidget=3458764659571324112&cot=14)
+- **Jira Tool Data Flow**: [Miro widget](https://miro.com/app/board/uXjVGFuezRU=/?moveToWidget=3458764659571324125&cot=14)
+- **Brand Guidelines Data Flow**: [Miro widget](https://miro.com/app/board/uXjVGFuezRU=/?moveToWidget=3458764659571324137&cot=14)
 - **MCP Server Team Rollout Flow**: [Miro widget](https://miro.com/app/board/uXjVGFuezRU=/?moveToWidget=3458764659097372030&cot=14)
+- **MCP Server Team AI Tooling Platform**: [Miro widget](https://miro.com/app/board/uXjVGFuezRU=/?moveToWidget=3458764659097372005&cot=14)
 - **MCP Server Naming Convention**: [Miro widget](https://miro.com/app/board/uXjVGFuezRU=/?moveToWidget=3458764659097647598&cot=14)
 
 ---
