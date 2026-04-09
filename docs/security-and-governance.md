@@ -1,8 +1,7 @@
 # Security & Governance: MCP Relay
 
 **Status:** Draft v0.1\
-**Last Updated:** 2026-04-09\
-**Audience:** Security reviewers, architecture board, IdP administrators
+**Last Updated:** 2026-04-09
 
 ---
 
@@ -56,23 +55,16 @@ MCP Relay is a centralised server implementing the [Model Context Protocol](http
 
 ## 3. External Service Integrations
 
-### Current (Phase 1)
+| Service           | Purpose                                  | Permissions Required                   | Data Accessed                                             |
+| ----------------- | ---------------------------------------- | -------------------------------------- | --------------------------------------------------------- |
+| **Jira Cloud**    | Issue CRUD — get, create, search, update | Read/write issues via REST API v3      | Issue fields: key, summary, status, assignee, description |
+| **AWS S3**        | Fetch per-project brand guidelines       | Read-only access to a single S3 bucket | JSON configuration files (<1MB each)                      |
+| Azure DevOps      | Pipeline status, work items              | Read-only (TBC)                        | TBC                                                       |
+| SonarQube / Snyk  | Code quality, dependency scanning        | Read-only (TBC)                        | TBC                                                       |
+| Confluence        | Documentation search                     | Read-only (TBC)                        | TBC                                                       |
+| Nanobanana/Gemini | AI image generation                      | API call (TBC)                         | TBC                                                       |
 
-| Service        | Purpose                                  | Permissions Required                   | Data Accessed                                             |
-| -------------- | ---------------------------------------- | -------------------------------------- | --------------------------------------------------------- |
-| **Jira Cloud** | Issue CRUD — get, create, search, update | Read/write issues via REST API v3      | Issue fields: key, summary, status, assignee, description |
-| **AWS S3**     | Fetch per-project brand guidelines       | Read-only access to a single S3 bucket | JSON configuration files (<1MB each)                      |
-
-### Planned (Phase 2+)
-
-| Service           | Purpose                           | Permissions Required | Phase   |
-| ----------------- | --------------------------------- | -------------------- | ------- |
-| Azure DevOps      | Pipeline status, work items       | Read-only (TBC)      | Phase 2 |
-| SonarQube / Snyk  | Code quality, dependency scanning | Read-only (TBC)      | Phase 2 |
-| Confluence        | Documentation search              | Read-only (TBC)      | Phase 3 |
-| Nanobanana/Gemini | AI image generation               | API call (TBC)       | Future  |
-
-> **Note:** Each new integration follows the governance process defined in [Section 7](#7-adding-new-tool-integrations).
+Jira, S3, and Confluence are used by the team today. Azure DevOps, Nanobanana, and Gemini have been used in prior prototypes. SonarQube / Snyk is exploratory — no team member has requested it. The list above represents candidate integrations, not confirmed commitments. Each new integration follows the governance process defined in [Section 7](#7-adding-new-tool-integrations).
 
 ---
 
@@ -112,7 +104,7 @@ MCP Relay Server
 
 - User passwords or personal credentials
 - Persistent user data or profiles
-- File uploads or binary content (Phase 1)
+- File uploads or binary content (not planned initially)
 - Cached API responses (stateless architecture)
 
 ---
@@ -121,15 +113,13 @@ MCP Relay Server
 
 ### User Authentication (IdP Integration)
 
-| Aspect               | Detail                                                                                                  |
-| -------------------- | ------------------------------------------------------------------------------------------------------- |
-| **Protocol**         | OAuth 2.1 (MCP specification requirement for HTTP transport)                                            |
-| **Flow**             | Authorization Code with PKCE                                                                            |
-| **IdP**              | Corporate identity provider (SSO)                                                                       |
-| **What we need**     | OAuth client registration: client ID, client secret, redirect URI, allowed scopes                       |
-| **User experience**  | User opens MCP client → redirected to company SSO login → authenticates → returned to client with token |
-| **Token validation** | MCP Relay validates tokens against the IdP's JWKS endpoint on every request                             |
-| **Session model**    | Stateless — no server-side sessions; token validity checked per-request                                 |
+- **Protocol:** OAuth 2.1 (MCP specification requirement for HTTP transport)
+- **Flow:** Authorization Code with PKCE
+- **IdP:** Corporate identity provider (SSO)
+- **What we need:** OAuth client registration — client ID, client secret, redirect URI, allowed scopes
+- **User experience:** User opens MCP client → redirected to company SSO login → authenticates → returned to client with token
+- **Token validation:** MCP Relay validates tokens against the IdP's JWKS endpoint on every request
+- **Session model:** Stateless — no server-side sessions; token validity checked per-request
 
 ### Why OAuth 2.1 / SSO?
 
@@ -142,10 +132,10 @@ MCP Relay Server
 
 MCP Relay requires two separate authentication mechanisms, serving different purposes:
 
-| Layer                     | Purpose                                        | Protocol               | Phase   |
-| ------------------------- | ---------------------------------------------- | ---------------------- | ------- |
-| **Corporate IdP (SSO)**   | Verify the user is allowed to use MCP Relay    | OAuth 2.1 (PKCE)       | Phase 2 |
-| **Per-service user auth** | Act as the user when calling external services | Service-specific OAuth | Phase 2 |
+| Layer                     | Purpose                                        | Protocol               |
+| ------------------------- | ---------------------------------------------- | ---------------------- |
+| **Corporate IdP (SSO)**   | Verify the user is allowed to use MCP Relay    | OAuth 2.1 (PKCE)       |
+| **Per-service user auth** | Act as the user when calling external services | Service-specific OAuth |
 
 **Corporate IdP** controls access to MCP Relay itself. This is the IdP registration request this document supports.
 
@@ -157,10 +147,10 @@ Without per-service user auth, all actions would appear as a shared service acco
 
 ### Authorisation (Current & Future)
 
-| Phase   | Model                                                                                                                       |
-| ------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Phase 2 | All authenticated users can access all tools (flat access); per-user attribution via service-specific OAuth (e.g. Jira 3LO) |
-| Phase 3 | Per-team or per-role tool access via scopes or group claims from IdP (RBAC)                                                 |
+| Stage       | Model                                                                                                                       |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **Initial** | All authenticated users can access all tools (flat access); per-user attribution via service-specific OAuth (e.g. Jira 3LO) |
+| **Future**  | Per-team or per-role tool access via scopes or group claims from IdP (RBAC)                                                 |
 
 ---
 
@@ -168,18 +158,16 @@ Without per-service user auth, all actions would appear as a shared service acco
 
 MCP Relay centralises API credentials so that individual users never need direct access to service tokens.
 
-| Principle                       | Implementation                                                                    |
-| ------------------------------- | --------------------------------------------------------------------------------- |
-| **Storage**                     | Secrets manager (e.g. AWS Secrets Manager) — never in code, config files, or logs |
-| **Access**                      | Injected at container startup; read into memory only                              |
-| **Rotation**                    | Supported without redeployment (secrets manager handles rotation)                 |
-| **Scope**                       | One set of credentials per external service, managed centrally                    |
-| **Audit**                       | Secrets manager logs who accessed which secret and when (e.g. CloudTrail)         |
-| **Local development (Phase 1)** | `.env` file (gitignored), validated at startup with Zod                           |
+- **Storage:** Secrets manager (e.g. AWS Secrets Manager) — never in code, config files, or logs
+- **Access:** Injected at container startup; read into memory only
+- **Rotation:** Supported without redeployment (secrets manager handles rotation)
+- **Scope:** One set of credentials per external service, managed centrally
+- **Audit:** Secrets manager logs who accessed which secret and when (e.g. CloudTrail)
+- **Local development:** `.env` file (gitignored), validated at startup with Zod
 
 ### Credentials inventory
 
-#### Phase 1 — Local development (service account)
+#### Local development (service account)
 
 | Credential              | Service    | Permission Level                                          |
 | ----------------------- | ---------- | --------------------------------------------------------- |
@@ -190,7 +178,7 @@ MCP Relay centralises API credentials so that individual users never need direct
 | `AWS_SECRET_ACCESS_KEY` | AWS S3     | Read-only access to config bucket                         |
 | `S3_BUCKET_NAME`        | AWS S3     | Bucket identifier                                         |
 
-#### Phase 2 — Deployed (per-user attribution)
+#### Deployed (per-user attribution)
 
 | Credential                    | Service    | Permission Level                                   |
 | ----------------------------- | ---------- | -------------------------------------------------- |
@@ -201,7 +189,7 @@ MCP Relay centralises API credentials so that individual users never need direct
 | `AWS_SECRET_ACCESS_KEY`       | AWS S3     | Read-only access to config bucket                  |
 | `S3_BUCKET_NAME`              | AWS S3     | Bucket identifier                                  |
 
-> **Note:** The Phase 1 service account credentials (`JIRA_API_TOKEN`, `JIRA_USER_EMAIL`) are replaced by the Jira OAuth 2.0 (3LO) flow in Phase 2. S3 remains service-level as there is no per-user access requirement for brand guidelines.
+> **Note:** The local development service account credentials (`JIRA_API_TOKEN`, `JIRA_USER_EMAIL`) are replaced by the Jira OAuth 2.0 (3LO) flow once deployed. S3 remains service-level as there is no per-user access requirement for brand guidelines.
 
 ---
 

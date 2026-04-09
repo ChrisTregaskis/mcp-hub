@@ -222,11 +222,13 @@ No enterprise infrastructure required. Everything runs locally.
 
 This is the critical phase. The code may be ready, but deployment is blocked without enterprise access.
 
+> **OAuth / IdP registration** is the highest-effort request and the longest lead time item. The [Security & Governance](security-and-governance.md) document provides the full detail needed to evaluate this request — covering authentication flows, credential management, data handling, and the governance process for new integrations.
+
 #### Access Requests
 
 | Request                                                | Why                                                                                                                                                                                   | Effort | Blocked Without It                |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------- |
-| **OAuth client / IdP registration**                    | MCP spec requires OAuth 2.1 for HTTP transport; need client ID + secret from corporate identity provider. See [Security & Governance](security-and-governance.md) doc for more detail | High   | Cannot authenticate team members  |
+| **OAuth client / IdP registration**                    | MCP spec requires OAuth 2.1 for HTTP transport; need client ID + secret from corporate identity provider | High   | Cannot authenticate team members  |
 | **Container hosting** (e.g. ECS Fargate, Cloud Run)    | Need somewhere to run the server                                                                                                                                                      | Medium | Cannot deploy                     |
 | **Subdomain / DNS record**                             | Teams need a URL to point their MCP clients at                                                                                                                                        | Medium | Cannot connect                    |
 | **Secrets manager access**                             | API tokens must not live in `.env` files on a shared server                                                                                                                           | Low    | Cannot securely store credentials |
