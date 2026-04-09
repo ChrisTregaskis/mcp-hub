@@ -1,7 +1,7 @@
 # Architecture: MCP Relay
 
-**Status:** Draft v0.1
-**Last Updated:** 2026-02-12
+**Status:** Draft v0.1\
+**Last Updated:** 2026-02-12\
 **Protocol Version:** 2025-11-25
 
 ---
@@ -27,36 +27,37 @@ Implements the [Model Context Protocol](https://modelcontextprotocol.io) (MCP). 
 
 ```
 Team Member                    MCP Server                     External Services
-    │                              │                                │
-    ├─ Connects MCP client ───────►│                                │
-    │  (Code/Desktop/VS Code/      │                                │
-    │   Cowork/API agent)          │                                │
-    │                              │                                │
-    ├─ Invokes tool ──────────────►│                                │
-    │  (e.g. "search Jira")        │                                │
-    │                              ├─ Validates input (Zod) ───────►│
-    │                              ├─ Authenticates (server creds) ─►│ Jira / S3
-    │                              ├─ Executes API call ────────────►│
-    │                              │◄─ Receives response ───────────┤
-    │                              ├─ Validates response (Zod) ────►│
-    │                              ├─ Transforms to MCP content ───►│
-    │◄─ Formatted result ──────────┤                                │
+    │                               │                                  │
+    ├── Connects MCP client ───────►│                                  │
+    │  (Code/Desktop/VS Code/       │                                  │
+    │   Cowork/API agent)           │                                  │
+    │                               │                                  │
+    ├── Invokes tool ──────────────►│                                  │
+    │  (e.g. "search Jira")         │                                  │
+    │                               ├── Validates input (Zod) ────────►│
+    │                               ├── Authenticates (server creds) ─►│ Jira / S3
+    │                               ├── Executes API call ────────────►│
+    │                               │◄── Receives response ────────────┤
+    │                               ├── Validates response (Zod) ─────►│
+    │                               ├── Transforms to MCP content ────►│
+    │◄── Formatted result ──────────┤                                  │
 ```
 
-### POC Scope (Phase 1)
+### POC Scope
 
-| In scope     | Jira tools (get, create, search, update), Brand Guidelines (S3 config fetch), shared auth (env vars), stdio transport, Zod validation, error handling, rate limiting hooks, structured logging |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Out of scope | Azure DevOps, SonarQube, CI/CD tools, Nanobanana/Gemini, per-user auth (OAuth), Streamable HTTP (Phase 1→2 gate), production hosting, plugin system                                            |
+**In scope:** Jira tools (get, create, search, update), Brand Guidelines (S3 config fetch), shared auth (env vars), stdio transport, Streamable HTTP transport, per-user auth (SSO via OAuth 2.1), production hosting (internal team), Zod validation, error handling, rate limiting hooks, structured logging
+
+**Out of scope:** Azure DevOps, SonarQube, CI/CD tools, Nanobanana/Gemini, plugin system
 
 ### Target Users
 
-| User Type               | Client               | Use Case                                             |
-| ----------------------- | -------------------- | ---------------------------------------------------- |
-| Developers              | Claude Code, VS Code | Jira queries, brand guideline lookups                |
-| Delivery teams          | Claude Code, Cowork  | Jira issue management, project config access         |
-| Non-technical users     | Cowork               | Natural language access to Jira and brand guidelines |
-| CI/CD agents (Phase 2+) | API consumers        | Headless tool invocation                             |
+| User Type               | Client               | Use Case                                                 |
+| ----------------------- | -------------------- | -------------------------------------------------------- |
+| Developers              | Claude Code, VS Code | Jira queries, brand guideline lookups                    |
+| Delivery teams          | Claude Code, Cowork  | Jira issue management, project config access             |
+| Strategists             | Cowork (TBC)         | TBD; likely project planning and solution design tooling |
+| Non-technical users     | Cowork               | Natural language access to Jira and brand guidelines     |
+| CI/CD agents (Phase 2+) | API consumers        | Headless tool invocation                                 |
 
 ---
 
@@ -87,9 +88,9 @@ Team Member                    MCP Server                     External Services
 
 ### Transport
 
-- **Phase 1:** stdio (`StdioServerTransport`) — env var auth, per-developer
-- **Phase 1→2 gate:** Streamable HTTP (`StreamableHTTPServerTransport`) — spike S3 must pass first
-- **Phase 2+:** Streamable HTTP with OAuth 2.1
+- **stdio** (`StdioServerTransport`) — env var auth, per-developer (local development)
+- **Streamable HTTP** (`StreamableHTTPServerTransport`) — production transport for hosted deployment
+- **Auth:** per-user SSO via OAuth 2.1 — users authenticate with existing corporate credentials (e.g. Jira board access validated via SSO)
 
 ### Runtime (Phase 1)
 
@@ -164,22 +165,8 @@ Client-facing errors are generic (OWASP). Structured logging captures detail ser
 
 ### Evolution Triggers
 
-| Trigger                           | Action                                                   |
-| --------------------------------- | -------------------------------------------------------- |
-| Tool count exceeds 10             | Consider auto-discovery registry or plugin system        |
-| Handler files exceed ~150 lines   | Extract shared utilities                                 |
-| Multiple tools share complex auth | Extract auth into shared middleware                      |
-| Streamable HTTP is added          | Introduce session management, per-session server factory |
-
-### Implemented Tools (Phase 1)
-
-| Tool Name              | Purpose                              | External Service | Type  |
-| ---------------------- | ------------------------------------ | ---------------- | ----- |
-| `jira_get_issue`       | Fetch a Jira issue by key            | Jira REST API    | Read  |
-| `jira_create_issue`    | Create a new Jira issue              | Jira REST API    | Write |
-| `jira_search_issues`   | Search issues via JQL                | Jira REST API    | Read  |
-| `jira_update_issue`    | Update an existing issue             | Jira REST API    | Write |
-| `brand_get_guidelines` | Fetch brand guidelines for a project | AWS S3           | Read  |
+- **Tool count exceeds 10** — Consider auto-discovery registry or plugin system
+- **Multiple tools share complex auth** — Extract auth into shared middleware
 
 ---
 
@@ -284,10 +271,8 @@ transports/http.ts  ──►     │    ──► tools/brand/index.ts ──�
 
 ## 6. Supporting Documentation
 
-| Document                                                  | Contents                                                    |
-| --------------------------------------------------------- | ----------------------------------------------------------- |
-| [Key Decisions](supporting-docs/key-decisions.md)         | Resolved and deferred architecture questions with rationale |
-| [Data Flow](supporting-docs/data-flow.md)                 | Per-tool data flow diagrams and Zod schema inventories      |
-| [External Services](supporting-docs/external-services.md) | Jira, S3, and future service integration details            |
-| [Tech Stack](supporting-docs/tech-stack.md)               | Full stack table, dev tooling, and future considerations    |
-| [Open Items](supporting-docs/open-items.md)               | Risks, Phase 2+ MCP primitives, spikes, and phase roadmap   |
+- **[Key Decisions](supporting-docs/key-decisions.md)** — Resolved and deferred architecture questions with rationale
+- **[Data Flow](supporting-docs/data-flow.md)** — Per-tool data flow diagrams and Zod schema inventories
+- **[External Services](supporting-docs/external-services.md)** — Jira, S3, and future service integration details
+- **[Tech Stack](supporting-docs/tech-stack.md)** — Full stack table, dev tooling, and future considerations
+- **[Open Items](supporting-docs/open-items.md)** — Risks, Phase 2+ MCP primitives, spikes, and phase roadmap

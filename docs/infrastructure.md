@@ -1,6 +1,6 @@
 # Infrastructure: MCP Relay
 
-**Status:** Draft v0.1
+**Status:** Draft v0.1\
 **Last Updated:** 2026-04-08
 
 ---
@@ -18,7 +18,7 @@
 
 ## 1. Overview
 
-This document defines the infrastructure services required to take MCP Relay from local development through to a team-accessible deployed prototype. Each requirement is described **service-agnostically** first, then mapped to provider options.
+This document defines the infrastructure services required to take MCP Relay from local development through to a team-accessible deployed prototype. Each requirement is described **service-agnostically** first, then mapped to provider options. For an overview of what MCP Relay is and what it aims to achieve, see the [Architecture document](architecture/architecture.md).
 
 Phase 2 is the critical path — company access requests to enable team-accessible deployment for prototype.
 
@@ -35,11 +35,9 @@ No hosting needed               Container hosting provisioned        HA + monito
 No company deps                 ⚠ Blocked without access requests    Production-grade
 ```
 
-| Phase       | Goal                                                                          | Audience                           |
-| ----------- | ----------------------------------------------------------------------------- | ---------------------------------- |
-| **Phase 1** | Build the MVP locally — all tools functional via stdio                        | Developer(s) building the server   |
-| **Phase 2** | Deploy prototype for team testing — requires enterprise infrastructure access | Select teams evaluating the server |
-| **Phase 3** | Harden, scale, and roll out to wider organisation                             | Multiple teams in production use   |
+- **Phase 1:** Build the MVP locally; all tools functional via stdio. Audience: developer(s) building the server
+- **Phase 2:** Deploy prototype for team testing; requires enterprise infrastructure access. Audience: select teams evaluating the server
+- **Phase 3:** Harden, scale, and roll out to wider organisation. Audience: multiple teams in production use
 
 ---
 
@@ -51,14 +49,10 @@ Each requirement is categorised by when it becomes necessary.
 
 **What:** A runtime environment to host the Node.js MCP server process.
 
-| Aspect           | Detail                                                                  |
-| ---------------- | ----------------------------------------------------------------------- |
-| Runtime          | Node.js 22+ (LTS)                                                       |
-| Workload type    | Long-running HTTP server (Streamable HTTP)                              |
-| Concurrency      | Multiple concurrent MCP client sessions                                 |
-| Statefulness     | Stateless — no server-side session persistence required                 |
-| Resource profile | Low CPU, low memory — thin proxy layer over external APIs               |
-| Availability     | Business hours initially; evolve to high availability as adoption grows |
+- **Runtime:** Node.js 22+ (LTS)
+- **Workload type:** Long-running HTTP server (Streamable HTTP), multiple concurrent sessions
+- **Resource profile:** Stateless, low CPU, low memory — thin proxy layer over external APIs
+- **Availability:** Business hours initially; evolve to high availability as adoption grows
 
 **Phase needed:** Phase 2 — request access to container hosting service (e.g. ECS Fargate, Cloud Run)
 
@@ -66,13 +60,9 @@ Each requirement is categorised by when it becomes necessary.
 
 **What:** Secure storage and injection of API credentials (Jira tokens, S3 keys, OAuth client secrets).
 
-| Aspect         | Detail                                                              |
-| -------------- | ------------------------------------------------------------------- |
-| Secrets count  | ~10 initially (Jira, S3, OAuth), growing with each tool integration |
-| Access pattern | Read at server startup + runtime (for credential rotation)          |
-| Rotation       | Must support rotation without redeployment                          |
-| Audit          | Log who accessed which secret and when                              |
-| Encryption     | At rest and in transit                                              |
+- **Secrets count:** ~10 initially (Jira, S3, OAuth), growing with each tool integration
+- **Access pattern:** Read at startup + runtime; must support rotation without redeployment
+- **Audit:** Log who accessed which secret and when
 
 **Phase needed:** Phase 2 — request access to secrets management service (e.g. AWS Secrets Manager, Key Vault)
 
@@ -80,13 +70,10 @@ Each requirement is categorised by when it becomes necessary.
 
 **What:** Storage for per-project configuration files (brand guidelines JSON). Already architected as S3-compatible in Phase 1.
 
-| Aspect         | Detail                                         |
-| -------------- | ---------------------------------------------- |
-| Content type   | JSON configuration files (small, <1MB)         |
-| Access pattern | Read-heavy, infrequent writes (config updates) |
-| Structure      | `{bucket}/{projectId}/guidelines.json`         |
-| Auth           | Service credentials (not user-facing)          |
-| Versioning     | Desirable for config rollback                  |
+- **Content type:** JSON configuration files (small, <1MB)
+- **Access pattern:** Read-heavy, infrequent writes (config updates)
+- **Structure:** `{bucket}/{projectId}/guidelines.json`
+- **Versioning:** Desirable for config rollback
 
 **Phase needed:** Phase 1 (brand guidelines tool) — request S3 bucket or equivalent storage access
 
@@ -110,32 +97,25 @@ MCP Client (work laptop)
 └──────────────────┘
 ```
 
-| Aspect         | Detail                                                                                                                                                   |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Role           | TLS termination, HTTPS enforcement, request forwarding to app                                                                                            |
-| TLS            | Automatic certificate provisioning and renewal (e.g. Caddy + Let's Encrypt)                                                                              |
-| Endpoint       | Single domain or subdomain for the MCP server                                                                                                            |
-| SSE support    | Required — Streamable HTTP uses Server-Sent Events                                                                                                       |
-| Load balancing | Not needed for prototype (single instance); defer to Phase 3                                                                                             |
-| Zscaler        | Company uses Zscaler proxy (no VPN). MCP servers currently work on work laptops without whitelisting — assume no issue for prototype, revisit if blocked |
+- **TLS:** Automatic certificate provisioning and renewal (e.g. Caddy + Let's Encrypt)
+- **SSE support:** Required — Streamable HTTP uses Server-Sent Events
+- **Load balancing:** Not needed for prototype (single instance); defer to Phase 3
+- **Zscaler:** Company uses Zscaler proxy (no VPN); currently works without whitelisting — revisit if blocked
 
 **Security considerations:**
 
 - Proxy must enforce TLS 1.2+ with strong ciphers (Caddy does this by default)
-- Internal traffic (proxy → app) is unencrypted — acceptable when both run on the same host or container task
+- Internal traffic (proxy → app) is unencrypted — acceptable when both run on the same container task
 - Forward `X-Forwarded-For` and `X-Forwarded-Proto` headers for logging and OAuth flows
-- The proxy is the internet-facing surface — keep it patched and up to date
 
-**Phase needed:** Phase 2 — request domain/subdomain allocation. Zscaler access assumed fine for prototype; escalate if blocked
+**Phase needed:** Phase 2 — request domain/subdomain allocation
 
 ### 2.5 DNS
 
 **What:** Domain name resolution for the MCP server endpoint.
 
-| Aspect    | Detail                                                      |
-| --------- | ----------------------------------------------------------- |
-| Records   | Single A/CNAME record pointing to the compute instance      |
-| Subdomain | e.g. `mcp.{company-domain}` or `mcp-relay.{company-domain}` |
+- **Records:** Single A/CNAME record pointing to the compute instance
+- **Subdomain:** e.g. `mcp.{company-domain}` or `mcp-relay.{company-domain}`
 
 **Phase needed:** Phase 2 — request subdomain allocation from infrastructure/network team
 
@@ -143,13 +123,11 @@ MCP Client (work laptop)
 
 **What:** Centralised log aggregation and uptime monitoring for the server process.
 
-| Aspect     | Detail                                                   |
-| ---------- | -------------------------------------------------------- |
-| Log format | Structured JSON (already implemented in the server)      |
-| Log volume | Low — one log entry per tool invocation + errors         |
-| Metrics    | Request count, latency, error rate per tool              |
-| Alerting   | Server down, sustained error rate, external API failures |
-| Retention  | 30 days minimum                                          |
+- **Log format:** Structured JSON (already implemented in the server)
+- **Log volume:** Low — one log entry per tool invocation + errors
+- **Metrics:** Request count, latency, error rate per tool
+- **Alerting:** Server down, sustained error rate, external API failures
+- **Retention:** 30 days minimum
 
 **Phase needed:** Phase 2 — request access to logging platform (e.g. CloudWatch, Datadog)
 
@@ -157,11 +135,9 @@ MCP Client (work laptop)
 
 **What:** Storage for Docker images if using a containerised deployment.
 
-| Aspect     | Detail                                              |
-| ---------- | --------------------------------------------------- |
-| Image size | Small (~100MB — Node.js slim + compiled TypeScript) |
-| Tagging    | Semantic versioning aligned with releases           |
-| Scanning   | Vulnerability scanning on push (desirable)          |
+- **Image size:** Small (~100MB — Node.js slim + compiled TypeScript)
+- **Tagging:** Semantic versioning aligned with releases
+- **Scanning:** Vulnerability scanning on push (desirable)
 
 **Phase needed:** Phase 2 — request container registry access (e.g. ECR, ACR)
 
@@ -169,12 +145,10 @@ MCP Client (work laptop)
 
 **What:** Automated build, test, and deployment pipeline.
 
-| Aspect       | Detail                                                  |
-| ------------ | ------------------------------------------------------- |
-| Triggers     | Push to main, PR checks                                 |
-| Steps        | Lint → format check → typecheck → test → build → deploy |
-| Environments | Staging → production (when team adoption warrants it)   |
-| Rollback     | One-click rollback to previous version                  |
+- **Triggers:** Push to main, PR checks
+- **Steps:** Lint → format check → typecheck → test → build → deploy
+- **Environments:** Staging → production (when team adoption warrants it)
+- **Rollback:** One-click rollback to previous version
 
 **Phase needed:** Phase 2 — confirm CI/CD platform (GitHub Actions likely sufficient if already in use)
 
@@ -182,11 +156,9 @@ MCP Client (work laptop)
 
 **What:** Authentication and authorisation for MCP clients connecting over HTTP.
 
-| Aspect   | Detail                                                       |
-| -------- | ------------------------------------------------------------ |
-| Protocol | OAuth 2.1 (MCP specification requirement for HTTP transport) |
-| Provider | Corporate identity provider (SSO) or standalone OAuth server |
-| Scopes   | Per-tool or per-domain authorisation (future)                |
+- **Protocol:** OAuth 2.1 (MCP specification requirement for HTTP transport)
+- **Provider:** Corporate identity provider (SSO) or standalone OAuth server
+- **Scopes:** Per-tool or per-domain authorisation (future)
 
 **Phase needed:** Phase 2 — request OAuth client registration or access to corporate IdP (longest lead time item)
 
@@ -247,17 +219,15 @@ For teams preferring simplicity or without AWS accounts:
 
 ## 5. Phased Deployment
 
-### Phase 1 — Local MVP Development (Current)
+### Phase 1 — Local MVP Development
 
 No enterprise infrastructure required. Everything runs locally.
 
-| What                                     | Status                               |
-| ---------------------------------------- | ------------------------------------ |
-| stdio transport                          | Done                                 |
-| Jira tools (get, create, search, update) | Done                                 |
-| Brand guidelines tool (S3)               | In progress — needs S3 bucket access |
-| Local `.env` credentials                 | Done                                 |
-| MCP Inspector for manual testing         | Done                                 |
+- stdio transport
+- Jira tools (get, create, search, update)
+- Brand guidelines tool (S3) — in progress, needs S3 bucket access
+- Local `.env` credentials
+- MCP Inspector for manual testing
 
 **Infrastructure action:** Request S3 bucket access for brand guidelines (only Phase 1 dependency on enterprise services).
 
