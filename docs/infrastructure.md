@@ -1,7 +1,7 @@
 # Infrastructure: MCP Relay
 
 **Status:** Draft v0.1\
-**Last Updated:** 2026-04-08
+**Last Updated:** 2026-04-09
 
 ---
 
@@ -202,19 +202,6 @@ AWS is recommended because the project already has an S3 dependency (brand guide
 | **CI/CD**              | **GitHub Actions**  | Already using GitHub; deploy to ECS via `aws-actions/amazon-ecs-deploy-task-definition`                                     |
 | **Identity**           | **Cognito**         | OAuth 2.1 compliant; or integrate with existing corporate IdP                                                               |
 
-### Alternative: Lightweight / Self-Hosted
-
-For teams preferring simplicity or without AWS accounts:
-
-| Requirement        | Service                                             | Rationale                                         |
-| ------------------ | --------------------------------------------------- | ------------------------------------------------- |
-| **Compute**        | **Docker on VPS** (e.g. Hetzner, DigitalOcean)      | Cheapest option; full control                     |
-| **Secrets**        | **Doppler** or **environment variables** on host    | Simple secret injection                           |
-| **Object Storage** | **S3-compatible** (e.g. DigitalOcean Spaces, MinIO) | Drop-in replacement via AWS SDK endpoint override |
-| **Reverse Proxy**  | **Caddy**                                           | Automatic TLS via Let's Encrypt, zero config      |
-| **CI/CD**          | **GitHub Actions** + SSH deploy                     | Straightforward for single-server setups          |
-| **Identity**       | **Auth0** or **Keycloak**                           | Standalone OAuth provider                         |
-
 ---
 
 ## 5. Phased Deployment
@@ -263,15 +250,7 @@ This is the critical phase. The code may be ready, but deployment is blocked wit
 
 ### Phase 3 — Scale & Harden
 
-Once the prototype is validated with select teams, prepare for wider rollout.
-
-- Evaluate horizontal scaling (multiple container instances, auto-scaling)
-- Introduce load balancer (ALB or equivalent) to replace reverse proxy when scaling to multiple instances
-- Add staging environment for testing new tool integrations
-- Implement RBAC (per-team tool access, scoped permissions)
-- Review cost optimisation (reserved capacity, spot instances)
-- Harden monitoring and alerting (SLAs, on-call runbook)
-- Expand tool catalogue (Phase 2+ tools from roadmap)
+Once the prototype is validated with select teams, prepare for wider rollout. This includes evaluating horizontal scaling (multiple container instances, auto-scaling) and introducing a load balancer (ALB or equivalent) to replace the reverse proxy. A staging environment should be added for testing new tool integrations, and RBAC implemented for per-team tool access and scoped permissions. Cost optimisation (reserved capacity, spot instances), monitoring and alerting hardening (SLAs, on-call runbook), and expanding the tool catalogue round out this phase.
 
 ---
 

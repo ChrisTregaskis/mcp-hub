@@ -1,7 +1,7 @@
 # Architecture: MCP Relay
 
 **Status:** Draft v0.1\
-**Last Updated:** 2026-02-12\
+**Last Updated:** 2026-04-09\
 **Protocol Version:** 2025-11-25
 
 ---
