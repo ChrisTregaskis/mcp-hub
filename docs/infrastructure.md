@@ -224,15 +224,15 @@ This is the critical phase. The code may be ready, but deployment is blocked wit
 
 #### Access Requests
 
-| Request                                                | Why                                                                                                      | Effort | Blocked Without It                |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | ------ | --------------------------------- |
-| **OAuth client / IdP registration**                    | MCP spec requires OAuth 2.1 for HTTP transport; need client ID + secret from corporate identity provider | High   | Cannot authenticate team members  |
-| **Container hosting** (e.g. ECS Fargate, Cloud Run)    | Need somewhere to run the server                                                                         | Medium | Cannot deploy                     |
-| **Subdomain / DNS record**                             | Teams need a URL to point their MCP clients at                                                           | Medium | Cannot connect                    |
-| **Secrets manager access**                             | API tokens must not live in `.env` files on a shared server                                              | Low    | Cannot securely store credentials |
-| **Container registry** (e.g. ECR, ACR)                 | Need to push Docker images                                                                               | Low    | Cannot deploy images              |
-| **Logging platform access** (e.g. CloudWatch, Datadog) | Need visibility into server health and errors                                                            | Low    | Cannot monitor or debug           |
-| **Network / firewall rules**                           | Zscaler proxy in use; MCP servers currently work without whitelisting — escalate only if blocked         | TBD    | Potential blocker, not expected   |
+| Request                                                | Why                                                                                                                                                                                   | Effort | Blocked Without It                |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------- |
+| **OAuth client / IdP registration**                    | MCP spec requires OAuth 2.1 for HTTP transport; need client ID + secret from corporate identity provider. See [Security & Governance](security-and-governance.md) doc for more detail | High   | Cannot authenticate team members  |
+| **Container hosting** (e.g. ECS Fargate, Cloud Run)    | Need somewhere to run the server                                                                                                                                                      | Medium | Cannot deploy                     |
+| **Subdomain / DNS record**                             | Teams need a URL to point their MCP clients at                                                                                                                                        | Medium | Cannot connect                    |
+| **Secrets manager access**                             | API tokens must not live in `.env` files on a shared server                                                                                                                           | Low    | Cannot securely store credentials |
+| **Container registry** (e.g. ECR, ACR)                 | Need to push Docker images                                                                                                                                                            | Low    | Cannot deploy images              |
+| **Logging platform access** (e.g. CloudWatch, Datadog) | Need visibility into server health and errors                                                                                                                                         | Low    | Cannot monitor or debug           |
+| **Network / firewall rules**                           | Zscaler proxy in use; MCP servers currently work without whitelisting — escalate only if blocked                                                                                      | TBD    | Potential blocker, not expected   |
 
 #### Build Tasks (once access is granted)
 
